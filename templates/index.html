@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>Speech to Text</title>
+
+<head>
+
+<title>Speech to Text</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    width: 60%;
+    margin: 40px auto;
+    background: white;
+    padding: 20px;
+    border-radius: 6px;
+    box-shadow: 0px 0px 5px rgba(0,0,0,0.1);
+}
+
+h2 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+form {
+    margin-bottom: 20px;
+}
+
+input[type="file"],
+select {
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+button {
+    padding: 8px 15px;
+    margin-top: 10px;
+    border: none;
+    background-color: #333;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #555;
+}
+
+.result-box {
+    margin-top: 20px;
+    padding: 10px;
+    border-left: 4px solid #333;
+    background-color: #fafafa;
+}
+
+.transcript-text {
+    margin-top: 10px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+#status {
+    margin-top: 10px;
+    font-weight: bold;
+}
+</style>
+
+</head>
+
+</head>
+
+<script>
+let mediaRecorder;
+let audioChunks = [];
+
+async function startRecording() {
+    try {
+        audioChunks = [];
+
+        document.getElementById("status").innerText = "Recording...";
+
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        mediaRecorder = new MediaRecorder(stream, {
+            mimeType: 'audio/webm'
+        });
+
+        mediaRecorder.start();
+
+        mediaRecorder.ondataavailable = event => {
+            audioChunks.push(event.data);
+        };
+
+    } catch (error) {
+        console.error(error);
+        document.getElementById("status").innerText = "Mic permission denied!";
+    }
+}
+
+function stopRecording() {
+    if (!mediaRecorder) {
+        alert("Start recording first!");
+        return;
+    }
+
+    mediaRecorder.stop();
+
+    mediaRecorder.onstop = async () => {
+        document.getElementById("status").innerText = "Uploading...";
+
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+
+        const formData = new FormData();
+
+        const lang = document.querySelector("select[name='language']").value;
+
+        formData.append("audio", audioBlob, "recording.webm");
+        formData.append("language", lang);
+
+        try {
+            const response = await fetch("/upload", {
+                method: "POST",
+                body: formData
+            });
+
+            const html = await response.text();
+            document.open();
+            document.write(html);
+            document.close();
+
+        } catch (error) {
+            console.error(error);
+            document.getElementById("status").innerText = "Upload failed!";
+        }
+    };
+}
+</script>
+
+<body>
+
+<div class="container">
+
+<h2>Speech to Text + Sentiment Analysis</h2>
+
+<form action="/upload" method="post" enctype="multipart/form-data">
+
+<input type="file" name="audio" accept=".mp3,.wav,.m4a" required>
+
+<br>
+
+<button type="submit">Upload Audio</button>
+
+<label>Select Language:</label>
+<select name="language">
+    <option value="auto">Auto Detect</option>
+    <option value="en">English</option>
+    <option value="hi">Hindi</option>
+    <option value="es">Spanish</option>
+</select>
+<br><br>
+
+</form>
+
+<!--live voice record -->
+<h3>🎤 Record Audio</h3>
+
+<button onclick="startRecording()">Start Recording</button>
+<button onclick="stopRecording()">Stop Recording</button>
+
+<p id="status"></p>
+
+{% if transcription %}
+<div class="result-box">
+    <h3>📝 Transcription</h3>
+    <p class="transcript-text">{{ transcription }}</p>
+
+    <p><b>Language:</b> {{ language|upper }}</p>
+
+    <br>
+
+    <a href="/download-txt?text={{ transcription }}">
+        <button>Download TXT</button>
+    </a>
+
+    <a href="/download-pdf?text={{ transcription }}">
+        <button>Download PDF</button>
+    </a>
+</div>
+{% endif %}
+
+{% if sentiment %}
+<div class="result-box">
+    <h3>📊 Sentiment</h3>
+    <p>
+        {{ sentiment[0]['label'] }} 
+        (Confidence: {{ (sentiment[0]['score'] * 100) | round(2) }}%)
+    </p>
+</div>
+{% endif %}
+
+
+<a href="/history">
+    <button>View History</button>
+</a>
+
+</div>
+
+</body>
+</html>
